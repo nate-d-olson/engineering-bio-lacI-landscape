@@ -171,7 +171,7 @@ ggplot() +
 
 Target extraction cutadapt parameters
 ```{r}
-read_tsv("tar")
+read_tsv("targets.tsv")
 ```
 
 
