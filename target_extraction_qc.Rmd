@@ -1,0 +1,196 @@
+---
+title: "Target Extraction QC"
+author: "Nate Olson"
+date: "2/14/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+# Overview
+Analysis and evaluation of HiFi sequence data generated as part of LacI landscape study.
+
+## Sections
+1. Raw seq data QC  
+1. Read Alignment  
+1. Extracting Target Sequences
+
+# Results
+## Raw seq data QC
+
+```{r}
+## Full dataset
+hifi_qc <- read_tsv(here("data","processed","pipe_dev","XTACK.ccs.tsv")) %>% 
+    rename(seq_id = '#name')
+
+## lacI fish results
+lacI_tbl <- read_tsv(here("data","processed","pipe_dev","lacI_fish.tsv")) %>% 
+    rename(seq_id = Ref)
+
+hifi_qc <- left_join(hifi_qc, lacI_tbl)
+```
+
+```{r}
+ggplot(hifi_qc) + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    theme_bw() + 
+    labs(x = "Read length (bp)")
+```
+```{r}
+ggplot(hifi_qc) + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    xlim(5550,5700) + 
+    theme_bw() +
+    labs(x = "Read length (bp)")
+```
+
+Reads less outside the expected size range
+```{r}
+hifi_qc %>% filter(length < 5500 | length > 5700) %>% 
+ggplot() + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    theme_bw() +
+    labs(x = "Read length (bp)")
+```
+
+Reads with lacI, strand indicates reads were in the forward or reverse direction, and NA indicates lacI was not present.
+
+```{r}
+hifi_qc %>% group_by(Strand) %>% 
+    summarise(count = n())
+```
+
+As epxected most of the sequences with LacI are the expected length, however there are a few reads outside the expected size range. 
+```{r}
+hifi_qc %>% 
+    ggplot() + 
+    geom_histogram(aes(x = length, fill = Strand), 
+                   bins = 100, 
+                   position = "dodge") + 
+    facet_wrap(~Query, ncol = 1, scales = "free") + 
+    theme_bw()
+```
+
+The read with lacI "-" Strand matches were reverse complemented prior to target region extraction. 
+
+## Read Alignment
+
+- Used read mapping for further initial characterization and as a first attempt to extract target sequences.
+- Mapped reads to plasmid using mimimap2 (REF).  
+- Visualized Alignments using IGV with provided annotations.
+- Summary statistics include read accuracy estimates. 
+- Initial mapping does not provide good coverage for regions of interest (barcodes and LacI). It was unclear whether the lack of coverage was due to an artifact of the read mapper or the reads did not include the regions of interest. 
+- Tried mapping the reads to the plasmid using a number of different approaches, none provided overly satisfactory results. 
+
+image: ![](results/qc/minimap2_full_plasmid.png)
+
+
+
+
+## Extracting Target Sequences
+
+- Used cutadapt to extract relevant sequences from the CCS reads, https://cutadapt.readthedocs.io/en/stable/guide.html. 
+24 - 25bp flanking regions were used to extract relevant regions.  
+- ~90% of reads included all of the target regions with about half of them in the reverse direction EXCEPT for the barcode region. 
+- 
+TODO update with adapters used in pipeline 
+
+Target     | 5prime                    | 3prime                    |
+|:---------|:--------------------------|:--------------------------|
+| barcode1 | ATCGGTGAGCCCGGGCTGTCGGCGT | ATATGCCAGCAGGCCGGCCACGCT  |
+| barcode2 | ATATGCCAGCAGGCCGGCCACGCT  | CGGTGGCCCGGGCGGCCGCACGATG |
+| lacI     | TATTTTTTCCTCCTGGATTATCACT | TTCATATTCACCACCCTGAATTGAC |
+| Insulator| CATCGTATAACGTTACTGGTTTCAT | GCTACATGAGTAGCAGTACGAAAAT |
+| tetA     | ACTAGCCATCAAGGAGAGCTGCTAC | GTGCCTAACGGCGTAAGGAGGTATT |
+| YEP      | CTAAACAAGAAACGAGTGCCTAACG | AATAAAAGCGGGAGACCAGAAACAA |
+| KAN      | TGGACGAGCTGTATAAATAAAAGCG | ACCCCTTAATAAGATGATCTTCTTG |
+| Ori      | TCCACTGAGCGTCAGACCCCTTAAT | ATAGTAAGCCAGTATACACTCCGCT |
+| empty1   | ATCGGTGAGCCCGGGCTGTCGGCGT ||
+| empty2   | CGGTGGCCCGGGCGGCCGCACGATG | TCACTGCCCGCTTTCCAGTCGGGAA |
+| empty3   | ACACCCTCATCAGTGCCAACATAGT ||
+| leading  | ATATTTGCTCATGAGCCCGAAGTGG ||
+| training | TGAGCGAGGAAGCACCTCAGATAAA ||
+
+
+```{r}
+
+get_log_summary <- function(log_path){
+    lns <- read_lines(log_path)
+    skip_lns <- str_which(lns, "Summary") + 1
+    n_lns <- str_which(lns, "=== Adapter")[1] - skip_lns - 2
+    
+    read_tsv(log_path, col_names = "log_summary", 
+                    skip = skip_lns, n_max = 6) %>% 
+        separate(log_summary, c("Metric","Value"),":") %>% 
+        mutate(Metric = str_trim(Metric),
+               Value = str_trim(Value)) %>% 
+        filter(!is.na(Metric),
+               Metric != "Total basepairs processed",
+               Metric != "Total written (filtered)") %>% 
+        spread(Metric, Value)
+}
+
+cutadapt_logs <- list.files(here("data","processed","pipe_dev","targets"), 
+                            pattern = "log") %>% 
+    set_names(str_remove(.,".log")) %>% 
+    map(~here("data","processed","pipe_dev","targets",.))
+
+map_dfr(cutadapt_logs, get_log_summary, .id = "target") %>% 
+    DT::datatable(rownames = FALSE)
+```
+
+Target Sequence Size Distributions
+```{r}
+target_stat_files <- list.files(here("data","processed","pipe_dev","targets"), 
+                            pattern = "_stats.tsv") %>% 
+    set_names(str_remove(.,"_stats.tsv")) %>% 
+    map(~here("data","processed","pipe_dev","targets",.))
+target_stats_df <- map_dfr(target_stat_files, read_tsv, .id = "target") 
+```
+Most of the sequences are around the expected size range but all target fastq files include sequences significantly larger than the expected size. 
+
+The target extraction code was modified to exclude sequences outside a defined size range, 
+```{r}
+ggplot(target_stats_df) + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    facet_wrap(~target, scales = "free") + 
+    theme_bw()
+```
+
+```{r}
+target_stats_df %>% 
+  filter(!(target %in% c("empty_3", "leading_seq","trailing_seq"))) %>% 
+ggplot() + 
+    geom_boxplot(aes(x = target, y = length)) + 
+    theme_bw()
+```
+
+
+Target extraction cutadapt parameters
+```{r}
+read_tsv("tar")
+```
+
+
+# Next Steps
+- Generate target sequence table  
+- Evaluate extra long seuqences to determine if they are sequencing or wetlab artifacts
+- (Optional) Link hi-seq UMI barcodes to CCS read IDs for non-barcode seq analysis  
+- (Optional) Use multiple sequence alignments for distance metrics
+- (Optional) LacI analysis for protein instead of DNA sequence
+
+# System Information
+
+```{r}
+s_info <- devtools::session_info()
+print(s_info$platform)
+```
+```{r}
+as.data.frame(s_info$packages) %>% 
+  filter(attached) %>% 
+  select(package, loadedversion, date, source) %>% 
+  knitr::kable()
+```

@@ -1,0 +1,121 @@
+---
+title: "LacI PacBio HiFi Data Analysis"
+author: "Nate Olson"
+date: "2/14/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+# Overview
+Analysis and evaluation of HiFi sequence data generated as part of LacI landscape study.
+
+## Sections
+1. Raw seq data QC  
+1. Read Alignment  
+1. Extracting Target Sequences
+
+# Results
+## Raw seq data QC
+
+- FASTQC was used for initial quality control stats (https://www.bioinformatics.babraham.ac.uk/projects/fastqc/.)
+- Read lengths ranged from 101-20949 bp, mode 5.5 - 6kb (fastq does not provide specific values)
+
+image: ![](results/qc/XTACK.ccs_fastqc/Images//sequence_length_distribution.png)
+
+Lengths of 1,008,199 sequences:
+  Mean: 5253.3       Std Dev: 1388.2
+  Minimum: 101    Maximum: 20949
+ 
+832456 reads > 5.5kb and < 5.8 kb
+
+image: ![](results/qc/geneious_filter_read_length_dist.pdf)
+
+## Read Alignment
+
+- Used read mapping for further initial characterization and as a first attempt to extract target sequences.
+- Mapped reads to plasmid using mimimap2 (REF).  
+- Visualized Alignments using IGV with provided annotations.
+- Summary statistics include read accuracy estimates. 
+- Initial mapping does not provide good coverage for regions of interest (barcodes and LacI). It was unclear whether the lack of coverage was due to an artifact of the read mapper or the reads did not include the regions of interest. 
+- Tried mapping the reads to the plasmid using a number of different approaches, none provided overly satisfactory results. 
+
+image: ![](results/qc/minimap2_full_plasmid.png)
+
+
+
+
+## Extracting Target Sequences
+
+- Used cutadapt to extract relevant sequences from the CCS reads, https://cutadapt.readthedocs.io/en/stable/guide.html. 
+24 - 25bp flanking regions were used to extract relevant regions.  
+- ~90% of reads included all of the target regions with about half of them in the reverse direction EXCEPT for the barcode region. 
+- The 
+
+Target     | 5prime                    | 3prime                    |
+|:---------|:--------------------------|:--------------------------|
+| barcode1 | ATCGGTGAGCCCGGGCTGTCGGCGT | ATATGCCAGCAGGCCGGCCACGCT  |
+| barcode2 | ATATGCCAGCAGGCCGGCCACGCT  | CGGTGGCCCGGGCGGCCGCACGATG |
+| lacI     | TATTTTTTCCTCCTGGATTATCACT | TTCATATTCACCACCCTGAATTGAC |
+| Insulator| CATCGTATAACGTTACTGGTTTCAT | GCTACATGAGTAGCAGTACGAAAAT |
+| tetA     | ACTAGCCATCAAGGAGAGCTGCTAC | GTGCCTAACGGCGTAAGGAGGTATT |
+| YEP      | CTAAACAAGAAACGAGTGCCTAACG | AATAAAAGCGGGAGACCAGAAACAA |
+| KAN      | TGGACGAGCTGTATAAATAAAAGCG | ACCCCTTAATAAGATGATCTTCTTG |
+| Ori      | TCCACTGAGCGTCAGACCCCTTAAT | ATAGTAAGCCAGTATACACTCCGCT |
+| empty1   | ATCGGTGAGCCCGGGCTGTCGGCGT ||
+| empty2   | CGGTGGCCCGGGCGGCCGCACGATG | TCACTGCCCGCTTTCCAGTCGGGAA |
+| empty3   | ACACCCTCATCAGTGCCAACATAGT ||
+| leading  | ATATTTGCTCATGAGCCCGAAGTGG ||
+| training | TGAGCGAGGAAGCACCTCAGATAAA ||
+
+
+```{r}
+
+get_log_summary <- function(log_path){
+    lns <- read_lines(log_path)
+    skip_lns <- str_which(lns, "Summary") + 1
+    n_lns <- str_which(lns, "=== Adapter")[1] - skip_lns - 2
+    
+    read_tsv(log_path, col_names = "log_summary", 
+                    skip = skip_lns, n_max = 6) %>% 
+        separate(log_summary, c("Metric","Value"),":") %>% 
+        mutate(Metric = str_trim(Metric),
+               Value = str_trim(Value)) %>% 
+        filter(!is.na(Metric),
+               Metric != "Total basepairs processed",
+               Metric != "Total written (filtered)") %>% 
+        spread(Metric, Value)
+}
+
+cutadapt_logs <- list.files(here("data","processed","extract_seqs"), 
+                            pattern = "log") %>% 
+    set_names(str_remove(.,".log")) %>% 
+    map(~here("data","processed","extract_seqs",.))
+
+map_dfr(cutadapt_logs, get_log_summary, .id = "target") %>% 
+    DT::datatable(rownames = FALSE)
+```
+
+# Next Steps
+- Verify annotations and library prep methods to help determine why lack of barcode region coverage  
+- Generate target sequence table  
+- Evaluate extra long seuqences to determine if they are sequencing or wetlab artifacts
+- (Optional) Link hi-seq UMI barcodes to CCS read IDs for non-barcode seq analysis  
+- (Optional) Use multiple sequence alignments for distance metrics
+- (Optional) LacI analysis for protein instead of DNA sequence
+
+# System Information
+
+```{r}
+s_info <- devtools::session_info()
+print(s_info$platform)
+```
+```{r}
+as.data.frame(s_info$packages) %>% 
+  filter(attached) %>% 
+  select(package, loadedversion, date, source) %>% 
+  knitr::kable()
+```
