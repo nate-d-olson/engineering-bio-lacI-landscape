@@ -2,3 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+results
+ref
+docs
+raw
+data
+.snakemake
+.DS_Store
