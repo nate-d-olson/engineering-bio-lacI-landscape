@@ -1,0 +1,192 @@
+---
+title: "Generate Table with Region Seq Information"
+author: "Nate Olson"
+date: '`r Sys.Date()`'  
+output:  
+  bookdown::html_document2:
+    code_folding: hide  
+    theme: yeti  
+    toc: yes  
+    toc_float: yes  
+---  
+
+```{r include = FALSE}
+library(Biostrings)
+library(data.table)
+library(tidyverse)
+library(here)
+```
+
+# Objective
+Develop table of sequences for individual plasmid regions for every PacBio CCS read.
+
+# Approach
+
+## Extract Targets
+
+Use cutadapt to extract relevant sequences from the CCS reads, https://cutadapt.readthedocs.io/en/stable/guide.html. 
+24 - 25bp flanking regions were used to extract relevant regions.
+
+Target     | 5prime                    | 3prime                    |
+|:---------|:--------------------------|:--------------------------|
+| barcode1 | ATCGGTGAGCCCGGGCTGTCGGCGT | ATATGCCAGCAGGCCGGCCACGCT  |
+| barcode2 | ATATGCCAGCAGGCCGGCCACGCT  | CGGTGGCCCGGGCGGCCGCACGATG |
+| lacI     | TATTTTTTCCTCCTGGATTATCACT | TTCATATTCACCACCCTGAATTGAC |
+| Insulator| CATCGTATAACGTTACTGGTTTCAT | GCTACATGAGTAGCAGTACGAAAAT |
+| tetA     | ACTAGCCATCAAGGAGAGCTGCTAC | GTGCCTAACGGCGTAAGGAGGTATT |
+| YEP      | CTAAACAAGAAACGAGTGCCTAACG | AATAAAAGCGGGAGACCAGAAACAA |
+| KAN      | TGGACGAGCTGTATAAATAAAAGCG | ACCCCTTAATAAGATGATCTTCTTG |
+| Ori      | TCCACTGAGCGTCAGACCCCTTAAT | ATAGTAAGCCAGTATACACTCCGCT |
+| empty1   | ATCGGTGAGCCCGGGCTGTCGGCGT ||
+| empty2   | CGGTGGCCCGGGCGGCCGCACGATG | TCACTGCCCGCTTTCCAGTCGGGAA |
+| empty3   | ACACCCTCATCAGTGCCAACATAGT ||
+| leading  | ATATTTGCTCATGAGCCCGAAGTGG ||
+| training | TGAGCGAGGAAGCACCTCAGATAAA ||
+
+The `scripts/bash/extract_target.sh` used to run cutadapt. 
+## QC
+Parse / Review cutadapt log files for number of extracted sequences, extracted sequence size, as well as start and end positions
+
+## Generate Table
+Combine cutadapt output fastq files into a table for statistical analysis.
+
+# Analysis
+## Cutadapt Logs
+
+```{r}
+cutadapt_logs <- list.files(here("data","processed","extract_seqs"), 
+                            pattern = "log") %>% 
+    set_names(str_remove(.,".log")) %>% 
+    map(~here("data","processed","extract_seqs",.))
+```
+
+### Summary
+```{r}
+get_log_summary <- function(log_path){
+    lns <- read_lines(log_path)
+    skip_lns <- str_which(lns, "Summary") + 1
+    n_lns <- str_which(lns, "=== Adapter")[1] - skip_lns - 2
+    
+    read_tsv(log_path, col_names = "log_summary", 
+                    skip = skip_lns, n_max = 6) %>% 
+        separate(log_summary, c("Metric","Value"),":") %>% 
+        mutate(Metric = str_trim(Metric),
+               Value = str_trim(Value)) %>% 
+        filter(!is.na(Metric),
+               Metric != "Total basepairs processed",
+               Metric != "Total written (filtered)") %>% 
+        spread(Metric, Value)
+}
+
+map_dfr(cutadapt_logs, get_log_summary, .id = "target")# %>% 
+    # DT::datatable(rownames = FALSE)
+```
+
+### Trim Positions
+```{r message = FALSE}
+make_trim_df <- function(log_path){
+    ## Get position for start of removed seq summary table
+    skip_lns <- read_lines(log_path) %>% 
+        str_which("^length")
+    
+    ## warning line
+    wrn_ln <- read_lines(log_path) %>% 
+        str_which("^WARNING:")
+    
+    nmax <- Inf
+    if(any(wrn_ln > skip_lns[1])){
+        wrn_ln <- wrn_ln[wrn_ln > skip_lns[1]]
+        nmax <- wrn_ln - skip_lns[length(skip_lns)] -3
+    }
+    
+    if(length(skip_lns) == 2){
+
+        ## Extract summary table for first adapter
+        df <- read_tsv(log_path, 
+                       skip = skip_lns[1] - 1,
+                       n_max = skip_lns[2] - skip_lns[1] - 5) %>%
+            mutate(adapter = 1)
+
+        ## Extract summary table for second adapter
+        df2 <- read_tsv(log_path, skip = skip_lns[2] - 1, 
+                        n_max = nmax, 
+                        skip_empty_rows = TRUE) %>%
+            mutate(adapter = 2)
+
+        ## Combine and return
+        bind_rows(df, df2) %>% return
+    }else{
+        read_tsv(log_path, skip = skip_lns - 1, 
+                 n_max = nmax,
+                 skip_empty_rows = TRUE) %>%
+            mutate(adapter = 1) %>%
+            return()
+    }
+}
+
+trim_df <- map_dfr(cutadapt_logs, make_trim_df, .id = "target")
+```
+
+Length of trimmed regions.  
+Adapter 1 is the first 5-prime adapter and adapter 2 is the 3-prime adapter.  
+The double peaks for the forward primer are interesting and likely represent reads with and without the barcode sequences. 
+
+```{r fig.height = 6}
+trim_df %>% filter(count > 1000) %>% 
+    ggplot() + geom_bar(aes(x = length, 
+                            y = count, 
+                            fill = as.character(adapter)), 
+                        stat = "identity") + 
+    facet_wrap(~target, ncol = 1, scales = "free_y") + 
+    theme_bw()
+```
+
+
+## Load Data
+```{r}
+fq_files <- list.files(here("data","processed","extract_seqs"), 
+                            pattern = "_filtered.fq") %>% 
+    set_names(str_remove(.,"_filtered.fq")) %>% 
+    map(~here("data","processed","extract_seqs",.))
+
+seq_dat <- fq_files %>% map(readDNAStringSet, format = "fastq")
+```
+## QC
+Looking at read length distribution
+```{r}
+get_length_dat <- function(seq_dat){
+    read_id <- names(seq_dat)
+    seq_bp <-  width(seq_dat)
+    data.frame(read_id, seq_bp, stringsAsFactors = FALSE)
+}
+
+seq_length_df <- map_dfr(seq_dat, get_length_dat, .id = "target")
+```
+
+```{r}
+seq_length_df %>% 
+  group_by(target) %>% 
+  mutate(q25 = quantile(seq_bp, 0.25),
+         q75 = quantile(seq_bp, 0.75)) %>% 
+  filter(seq_bp >= q25, seq_bp <= q75) %>% 
+ggplot() + 
+    geom_histogram(aes(x = seq_bp)) + 
+    geom_rug(aes(x = seq_bp)) + 
+    facet_wrap(~target, scales = "free") + 
+  theme_bw()
+```
+
+
+## Constructing Table
+```{r}
+get_target_tbl <- function(target_seq){
+    read_names <- names(target_seq)
+    dna_seq <- toString(target_seq)
+    data.table(read_names, dna_seq)
+}
+
+target_tbl <- map_dfr(seq_dat, get_target_tbl, .id = "target")
+
+fwrite(target_tbl, path = "results/target_seq_table.tsv.gz", compression = "gzip")
+```
+
