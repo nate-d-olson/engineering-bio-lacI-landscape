@@ -15,38 +15,41 @@ wildcard_constraints:
 
 
 ## Defining output directory 
-outdir="data/processed/pipe_dev"
+outdir="data/processed/XTACK_20200108"
+
+## Input fastq 
+infq = "data/raw/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.fastq.gz"
 
 ## All
 rule all:
     input:
-        outdir + "/XTACK.ccs.tsv" , 
+        outdir + "/XTACK_20200108.tsv" , 
         expand(outdir + "/{seq_group}_stats.tsv", 
             seq_group = SEQGROUP),
         expand(outdir + "/targets/{target}_stats.tsv",
             target = list(set(targets["target"]))),
-                expand(outdir + "/targets/{target}.tsv.gz",
+        expand(outdir + "/targets/XTACK_2020010_{target}.tsv.gz",
             target = list(set(targets["target"])))
 
 ## Initial QC
 rule ccs_qa:
-    input: "data/raw/XTACK.ccs.fastq"
-    output: outdir + "/XTACK.ccs.tsv" 
+    input: infq
+    output: outdir + "/XTACK_20200108.tsv" 
     shell: "seqkit fx2tab -nlgiH {input} > {output}"
 
 ## Identify forward and reverse seqs
 rule find_rev:
     input:
         ref="data/ref/lacI.fa",
-        fq="data/raw/XTACK.ccs.fastq"
+        fq=infq
     output: outdir + "/lacI_fish.tsv"
-    shell: "seqkit fish -j 12 -f {input.ref} {input.fq} 2> {output}"
+    shell: "seqkit fish -j 14 -f {input.ref} {input.fq} 2> {output}"
 
 ## Extract forward seqs
 rule forward_seqs:
     input: 
         fish_tbl=outdir + "/lacI_fish.tsv",
-        fq="data/raw/XTACK.ccs.fastq"
+        fq=infq
     output: temp(outdir + "/forward_seqs.fastq")
     shell: """
         awk '{{ if ($7== "+") {{print $1}}}}' {input.fish_tbl} \
@@ -57,7 +60,7 @@ rule forward_seqs:
 rule reverse_seqs:
     input: 
         fish_tbl=outdir + "/lacI_fish.tsv",
-        fq="data/raw/XTACK.ccs.fastq"
+        fq=infq
     output: temp(outdir + "/reverse_seqs.fastq")
     shell: """
         awk '{{ if ($7== "-") {{print $1}}}}' {input.fish_tbl} \
@@ -119,5 +122,5 @@ rule qa_targets:
 ### Make table
 rule make_seq_tbls:
     input: outdir + "/targets/{target}.fastq.gz"
-    output: outdir + "/targets/{target}.tsv.gz"
+    output: outdir + "/targets/XTACK_2020010_{target}.tsv.gz"
     shell: "seqkit fx2tab -H {input} | cut -f 1,2 | gzip -c > {output}" 
