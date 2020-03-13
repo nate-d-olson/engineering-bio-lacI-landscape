@@ -67,6 +67,8 @@ empty3   | ACACCCTCATCAGTGCCAACATAGT ||
 leading  | ATATTTGCTCATGAGCCCGAAGTGG ||
 training | TGAGCGAGGAAGCACCTCAGATAAA ||
 
+## Processing 20200108 PacBio CCS Dataset 
+- Modified snakemake to use new CCS dataset as input and output to input dataset specific directory (commit tag edb7fbd2408e06a40a5ebf2f94bbad076edf9cf4)
 
 # Notes
 - Might want to look into read mapper for circular genomes - or find out how to best deal with supplementary alignments
