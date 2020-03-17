@@ -10,8 +10,11 @@ targets = pd.read_csv("targets.tsv").set_index("target", drop = False)
 
 ## Wildcard constraints
 SEQGROUP=["forward", "reverse", "combined"]
+SPLITS = [f'{n:03}' for n in range(1,16)]
+print(SPLITS)
 wildcard_constraints:
-    seq_group="|".join(SEQGROUP)
+    seq_group="|".join(SEQGROUP),
+    split="|".join(SPLITS)
 
 
 ## Defining output directory 
@@ -24,8 +27,8 @@ infq = "data/raw/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.fastq.gz"
 rule all:
     input:
         outdir + "/XTACK_20200108.tsv" , 
-        expand(outdir + "/{seq_group}_stats.tsv", 
-            seq_group = SEQGROUP),
+        # expand(outdir + "/{seq_group}_stats.tsv", 
+        #     seq_group = SEQGROUP),
         expand(outdir + "/targets/{target}_stats.tsv",
             target = list(set(targets["target"]))),
         expand(outdir + "/targets/XTACK_2020010_{target}.tsv.gz",
@@ -38,19 +41,25 @@ rule ccs_qa:
     shell: "seqkit fx2tab -nlgiH {input} > {output}"
 
 ## Identify forward and reverse seqs
+rule split_fq: 
+    input: infq
+    output: expand(outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz", split = SPLITS)
+    params: n_parts = 15, outdir=outdir + "/split_fq"
+    shell: "seqkit split2 -p {params.n_parts} -O {params.outdir} {input}"
+
 rule find_rev:
     input:
         ref="data/ref/lacI.fa",
-        fq=infq
-    output: outdir + "/lacI_fish.tsv"
-    shell: "seqkit fish -j 14 -f {input.ref} {input.fq} 2> {output}"
+        fq=outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz"
+    output: outdir + "/lacI_fish_{split}.tsv"
+    shell: "seqkit fish -j 2 -f {input.ref} {input.fq} 2> {output}"
 
 ## Extract forward seqs
 rule forward_seqs:
     input: 
-        fish_tbl=outdir + "/lacI_fish.tsv",
-        fq=infq
-    output: temp(outdir + "/forward_seqs.fastq")
+        fish_tbl=outdir + "/lacI_fish_{split}.tsv",
+        fq=outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz"
+    output: temp(outdir + "/forward_seqs_{split}.fastq")
     shell: """
         awk '{{ if ($7== "+") {{print $1}}}}' {input.fish_tbl} \
             | seqtk subseq {input.fq} - > {output}
@@ -59,9 +68,9 @@ rule forward_seqs:
 ## Extract and reverse complement reverse seqs
 rule reverse_seqs:
     input: 
-        fish_tbl=outdir + "/lacI_fish.tsv",
-        fq=infq
-    output: temp(outdir + "/reverse_seqs.fastq")
+        fish_tbl=outdir + "/lacI_fish_{split}.tsv",
+        fq=outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz"
+    output: temp(outdir + "/reverse_seqs_{split}.fastq")
     shell: """
         awk '{{ if ($7== "-") {{print $1}}}}' {input.fish_tbl} \
             | seqtk subseq {input.fq} - |
@@ -71,15 +80,15 @@ rule reverse_seqs:
 ## Generate combined forward and reverse seq set
 rule combine_seqs:
     input: 
-        forward=outdir + "/forward_seqs.fastq", 
-        reverse=outdir + "/reverse_seqs.fastq"
+        forward=expand(outdir + "/forward_seqs_{split}.fastq", split = SPLITS),
+        reverse=expand(outdir + "/reverse_seqs_{split}.fastq", split = SPLITS)
     output: outdir + "/combined_seqs.fastq"
     shell: "cat {input.forward} {input.reverse} > {output}"
 
-rule qc_seqs:
-    input: outdir + "/{seq_group}_seqs.fastq"
-    output: outdir + "/{seq_group}_stats.tsv"
-    shell: "seqkit fx2tab -nlgiH {input} > {output}"
+# rule qc_seqs:
+#     input: outdir + "/{seq_group}_seqs_{split}.fastq"
+#     output: outdir + "/{seq_group}_stats_{split}.tsv"
+#     shell: "seqkit fx2tab -nlgiH {input} > {output}"
 ## TODO - add set to extract reads without lacI
 
 ## Filter seqs
