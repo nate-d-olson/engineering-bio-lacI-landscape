@@ -6,7 +6,7 @@ from snakemake.utils import min_version
 min_version("5.5.0")
 
 ## Parse target metadata file 
-targets = pd.read_csv("targets.tsv").set_index("target", drop = False)
+targets = pd.read_csv("targets.csv").set_index("target", drop = False)
 
 ## Wildcard constraints
 SEQGROUP=["forward", "reverse", "combined"]
