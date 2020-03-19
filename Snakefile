@@ -11,7 +11,7 @@ targets = pd.read_csv("targets.csv").set_index("target", drop = False)
 ## Wildcard constraints
 SEQGROUP=["forward", "reverse", "combined"]
 SPLITS = [f'{n:03}' for n in range(1,16)]
-print(SPLITS)
+
 wildcard_constraints:
     seq_group="|".join(SEQGROUP),
     split="|".join(SPLITS)

@@ -1,0 +1,147 @@
+---
+title: "Target Extraction QC"
+author: "Nate Olson"
+date: '`r Sys.Date()`'  
+output:  
+  bookdown::html_document2:
+    code_folding: hide  
+    theme: yeti  
+    toc: yes  
+    toc_float: yes 
+---
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+# Overview
+Analysis and evaluation of HiFi sequence data generated as part of LacI landscape study.
+
+## Sections
+1. Raw seq data QC  
+1. Read Alignment  
+1. Extracting Target Sequences
+
+# Results
+## Raw seq data QC
+
+```{r}
+## Full dataset
+hifi_qc <- read_tsv(here("data","processed","XTACK_20200108",
+                         "XTACK_20200108.tsv")) %>% 
+    rename(seq_id = '#name')
+```
+
+```{r}
+ggplot(hifi_qc) + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    geom_rug(aes(x = length)) +
+    scale_y_log10() + 
+    theme_bw() + 
+    labs(x = "Read length (bp)")
+```
+
+
+```{r}
+ggplot(hifi_qc) + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    xlim(5550,5700) + 
+    theme_bw() +
+    labs(x = "Read length (bp)")
+```
+
+Reads less outside the expected size range
+```{r}
+hifi_qc %>% filter(length < 5500 | length > 5700) %>% 
+ggplot() + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    theme_bw() +
+    labs(x = "Read length (bp)")
+```
+
+
+
+```{r}
+
+get_log_summary <- function(log_path){
+    lns <- read_lines(log_path)
+    skip_lns <- str_which(lns, "Summary") + 1
+    n_lns <- str_which(lns, "=== Adapter")[1] - skip_lns - 2
+    
+    read_tsv(log_path, col_names = "log_summary", 
+                    skip = skip_lns, n_max = 6) %>% 
+        separate(log_summary, c("Metric","Value"),":") %>% 
+        mutate(Metric = str_trim(Metric),
+               Value = str_trim(Value)) %>% 
+        filter(!is.na(Metric),
+               Metric != "Total basepairs processed",
+               Metric != "Total written (filtered)") %>% 
+        spread(Metric, Value)
+}
+
+cutadapt_logs <- list.files(here("data","processed","XTACK_20200108","targets"), 
+                            pattern = "log") %>% 
+    set_names(str_remove(.,".log")) %>% 
+    map(~here("data","processed","XTACK_20200108","targets",.))
+
+map_dfr(cutadapt_logs, get_log_summary, .id = "target") %>% 
+    DT::datatable(rownames = FALSE)
+```
+
+Target Sequence Size Distributions
+```{r}
+target_stat_files <- list.files(here("data","processed","XTACK_20200108","targets"), 
+                            pattern = "_stats.tsv") %>% 
+    set_names(str_remove(.,"_stats.tsv")) %>% 
+    map(~here("data","processed","XTACK_20200108","targets",.))
+target_stats_df <- map_dfr(target_stat_files, read_tsv, .id = "target") 
+```
+Most of the sequences are around the expected size range but all target fastq files include sequences significantly larger than the expected size. 
+
+The target extraction code was modified to exclude sequences outside a defined size range, 
+```{r fig.height = 8}
+ggplot(target_stats_df) + 
+    geom_histogram(aes(x = length), bins = 100) + 
+    facet_wrap(~target, scales = "free", ncol = 2) + 
+    theme_bw()
+```
+
+Most of the insulator sequences are much shorter than the expected 287 bp.
+This is either an issue with the adapter sequences used to extract the insulator sequence or the plasmid.
+```{r}
+target_stats_df %>% 
+    filter(target == "insulator") %>% 
+    group_by(length) %>% 
+    summarise(count = n()) %>% 
+    filter(count > 2000)
+```
+
+
+```{r}
+target_stats_df %>% 
+ggplot() + 
+    geom_boxplot(aes(x = target, y = length)) + 
+    scale_y_log10() +
+    theme_bw()
+```
+
+
+Target extraction cutadapt parameters
+```{r}
+read_csv("targets.csv")
+```
+
+
+# System Information
+
+```{r}
+s_info <- devtools::session_info()
+print(s_info$platform)
+```
+```{r}
+as.data.frame(s_info$packages) %>% 
+  filter(attached) %>% 
+  select(package, loadedversion, date, source) %>% 
+  knitr::kable()
+```

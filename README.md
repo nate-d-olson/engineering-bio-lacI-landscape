@@ -1,75 +1,30 @@
-# RAW READ QC
-Fastq file initial QC using `fastqc -t 6 XTACK.ccs.fastq`, version FastQC v0.11.8
-- Notes: ~1M total reads, with read lengths ranging from 101 bp to 21kb, 80K reads have read lengths around the expected 5.5kb
+# Bioinformatic Pipeline for Processing lacI Library
+
+## Pipeline Overview
+
+- This pipeline performs initial QC of the input PacBio sequencing data.
+- Uses the lacI sequence to determine read direction and reverse complements reverse reads.
+- Extracts target sequences, e.g. lacI and barcodes from reads.
+- Generates QC stats for extracted reads.
+
+## Pipeline Environment
+- Snakemake is used to compose the bioinformatic pipeline, https://snakemake.readthedocs.io/en/stable/.  
+- Snakemake and pipeline dependencies can be install using conda (https://www.anaconda.com/distribution/) and bioconda (https://bioconda.github.io/).
+- The pipeline is defined in the `Snakefile` and adapter sequences are defined in the `targets.csv` config file. 
+
+## Environment Setup
+- Install conda with python 3.7 if not already installed on the system, https://docs.anaconda.com/anaconda/install/, miniconda as well as the full anaconda install will work. 
+- Generate a conda environment for running the pipeline, `conda env create -n lacI_ccs --file environment.yaml`.
 
 
-# READ ALIGNMENT
-CCS reads aligned to full plasmid sequence using minimap2, see `align_reads.sh`.
-Used minimap2 parameters from GIAB pacbio ccs 10Kb README
+## Running pipeline
+- Activate conda environment `conda activate lacI_ccs`.
+- Run pipeline using `snakemake -j [#]`. The `-j` parameter takes the number of threads or parallel jobs snakemake executes simultaneously. (I like to also include `-p`, which prints the command snakemake executes at each step.) The dry run snakemake argument, `-n`, can be used to see which pipeline steps will be run.
 
-__Log from read alignment__ 
-[M::mm_idx_gen::0.008*0.32] collected minimizers
-[M::mm_idx_gen::0.008*0.48] sorted minimizers
-[M::main::0.009*0.48] loaded/built the index for 1 target sequence(s)
-[M::mm_mapopt_update::0.009*0.49] mid_occ = 3
-[M::mm_idx_stat] kmer size: 19; skip: 10; is_hpc: 0; #seq: 1
-[M::mm_idx_stat::0.009*0.49] distinct minimizers: 1014 (99.90% are singletons); average occurrences: 1.001; average spacing: 5.577
-[M::worker_pipeline::42.385*3.00] mapped 97347 sequences
-[M::worker_pipeline::74.974*3.03] mapped 94453 sequences
-[M::worker_pipeline::107.589*3.05] mapped 93946 sequences
-[M::worker_pipeline::140.214*3.05] mapped 94077 sequences
-[M::worker_pipeline::173.073*3.06] mapped 94041 sequences
-[M::worker_pipeline::205.467*3.06] mapped 94131 sequences
-[M::worker_pipeline::237.985*3.06] mapped 94522 sequences
-[M::worker_pipeline::270.428*3.07] mapped 94423 sequences
-[M::worker_pipeline::302.777*3.07] mapped 95123 sequences
-[M::worker_pipeline::335.196*3.07] mapped 97015 sequences
-[M::worker_pipeline::346.141*3.06] mapped 59121 sequences
-[M::main] Version: 2.17-r941
-[M::main] CMD: minimap2 -a -k 19 -O 5,56 -E 4,1 -B 5 -z 400,50 -r 2k --eqx --secondary=no XTACK_full_plasmid.fa XTACK.ccs.fastq
-[M::main] Real time: 346.143 sec; CPU: 1058.936 sec; Peak RSS: 2.429 GB
-[bam_sort_core] merging from 10 files and 1 in-memory blocks...
+## Modifying pipeline
+- Pipeline input files are defined in the `Snakefile`, this is not best practice but the pipeline was developed without intending to process multiple datasets. The pipeline can be easily modified to take a config file as input so that dataset specific parameters can be updated without modifying the pipeline code, i.e. `Snakefile`. 
+- The adapter sequences are defined and can be updated in the `targets.csv` file. 
+- Snakemake works similar to make in that it only reruns parts of the analysis pipeline when an input file is changed or the output file is missing. After updating the `targets.csv` file you will want to remove any pipeline output files you want to replace.  
 
-# Alignment QC
-calculating bam stats using `samtools stats -r XTACK_full_plasmid.fa XTACK.ccs.bam > XTACK.ccs.bam.stats`
-
-# Annotated plasmid
-Aligned annotated fasta to full plasmid sequence
-`minimap2 -a XTACK_full_plasmid.fa XTACK_annotated_plasmid.fa > XTACK_annotated.sam` 
-Generated bed file from alignment
-`bedtools bamtobed -i XTACK_annotated.sam > XTACK_annotated.bed`
-
-# Reordering plasmid
-Reordered plasmid sequence to start with tet as most a lot of the reads were clipped at the left end of the alignment. 
-`XTACK_full_plasmid_reordered.fa`
-`XTACK_annotated_reordered.bed`
-Hoping to get better coverage of the barcode and LacI sequence. 
-
-Reordering did not really help. Need to look into better method for read sequence alignment
-
-
-## Extracting target sequences
-__Approach__ 
-Using cutadapt (https://cutadapt.readthedocs.io/en/stable/guide.html) to pull out targets
-
-Target   | 5prime                    | 3prime                    |
-barcode1 | ATCGGTGAGCCCGGGCTGTCGGCGT | ATATGCCAGCAGGCCGGCCACGCT  |
-barcode2 | ATATGCCAGCAGGCCGGCCACGCT  | CGGTGGCCCGGGCGGCCGCACGATG |
-lacI     | TATTTTTTCCTCCTGGATTATCACT | TTCATATTCACCACCCTGAATTGAC |
-Insulator| CATCGTATAACGTTACTGGTTTCAT | GCTACATGAGTAGCAGTACGAAAAT |
-tetA     | ACTAGCCATCAAGGAGAGCTGCTAC | GTGCCTAACGGCGTAAGGAGGTATT |
-YEP      | CTAAACAAGAAACGAGTGCCTAACG | AATAAAAGCGGGAGACCAGAAACAA |
-KAN      | TGGACGAGCTGTATAAATAAAAGCG | ACCCCTTAATAAGATGATCTTCTTG |
-Ori      | TCCACTGAGCGTCAGACCCCTTAAT | ATAGTAAGCCAGTATACACTCCGCT |
-empty1   | ATCGGTGAGCCCGGGCTGTCGGCGT ||
-empty2   | CGGTGGCCCGGGCGGCCGCACGATG | TCACTGCCCGCTTTCCAGTCGGGAA |
-empty3   | ACACCCTCATCAGTGCCAACATAGT ||
-leading  | ATATTTGCTCATGAGCCCGAAGTGG ||
-training | TGAGCGAGGAAGCACCTCAGATAAA ||
-
-## Processing 20200108 PacBio CCS Dataset 
-- Modified snakemake to use new CCS dataset as input and output to input dataset specific directory (commit tag edb7fbd2408e06a40a5ebf2f94bbad076edf9cf4)
-
-# Notes
-- Might want to look into read mapper for circular genomes - or find out how to best deal with supplementary alignments
-- filtering reads by length http://www.metagenomics.wiki/tools/short-read/filter-remove-too-short-reads-length
+## Pipeline output QC
+- The `target_extraction_qc_XTACK_20200108.Rmd` file include some initial QC on the input dataset and extracted target seqeunces(specifically read length distributions). 
