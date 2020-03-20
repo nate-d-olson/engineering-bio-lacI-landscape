@@ -17,11 +17,15 @@ wildcard_constraints:
     split="|".join(SPLITS)
 
 
-## Defining output directory 
-outdir="data/processed/XTACK_20200108"
+## Define input and output files/directories in configfile
+configfile: "config.yaml"
+
+## Output directory fastq 
+outdir=config["outdir"]
 
 ## Input fastq 
-infq = "data/raw/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.fastq.gz"
+infq = config["infq"]
+input_prefix = "/split_fq/" + infq[9:-9]
 
 ## All
 rule all:
@@ -43,14 +47,14 @@ rule ccs_qa:
 ## Identify forward and reverse seqs
 rule split_fq: 
     input: infq
-    output: expand(outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz", split = SPLITS)
+    output: expand(outdir + input_prefix + ".part_{split}.fastq.gz", split = SPLITS)
     params: n_parts = 15, outdir=outdir + "/split_fq"
     shell: "seqkit split2 -p {params.n_parts} -O {params.outdir} {input}"
 
 rule find_rev:
     input:
         ref="data/ref/lacI.fa",
-        fq=outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz"
+        fq=outdir + input_prefix + ".part_{split}.fastq.gz"
     output: outdir + "/lacI_fish_{split}.tsv"
     shell: "seqkit fish -j 2 -f {input.ref} {input.fq} 2> {output}"
 
@@ -58,7 +62,7 @@ rule find_rev:
 rule forward_seqs:
     input: 
         fish_tbl=outdir + "/lacI_fish_{split}.tsv",
-        fq=outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz"
+        fq=outdir + input_prefix + ".part_{split}.fastq.gz"
     output: temp(outdir + "/forward_seqs_{split}.fastq")
     shell: """
         awk '{{ if ($7== "+") {{print $1}}}}' {input.fish_tbl} \
@@ -69,7 +73,7 @@ rule forward_seqs:
 rule reverse_seqs:
     input: 
         fish_tbl=outdir + "/lacI_fish_{split}.tsv",
-        fq=outdir + "/split_fq/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.part_{split}.fastq.gz"
+        fq=outdir + input_prefix + ".part_{split}.fastq.gz"
     output: temp(outdir + "/reverse_seqs_{split}.fastq")
     shell: """
         awk '{{ if ($7== "-") {{print $1}}}}' {input.fish_tbl} \
