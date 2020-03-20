@@ -25,7 +25,7 @@ outdir=config["outdir"]
 
 ## Input fastq 
 infq = config["infq"]
-input_prefix = "/split_fq/" + infq[9:-9]
+split_file_prefix = "/split_fq/" + infq[9:-9]
 
 ## All
 rule all:
@@ -47,14 +47,14 @@ rule ccs_qa:
 ## Identify forward and reverse seqs
 rule split_fq: 
     input: infq
-    output: expand(outdir + input_prefix + ".part_{split}.fastq.gz", split = SPLITS)
+    output: expand(outdir + split_file_prefix + ".part_{split}.fastq.gz", split = SPLITS)
     params: n_parts = 15, outdir=outdir + "/split_fq"
     shell: "seqkit split2 -p {params.n_parts} -O {params.outdir} {input}"
 
 rule find_rev:
     input:
         ref="data/ref/lacI.fa",
-        fq=outdir + input_prefix + ".part_{split}.fastq.gz"
+        fq=outdir + split_file_prefix + ".part_{split}.fastq.gz"
     output: outdir + "/lacI_fish_{split}.tsv"
     shell: "seqkit fish -j 2 -f {input.ref} {input.fq} 2> {output}"
 
@@ -62,7 +62,7 @@ rule find_rev:
 rule forward_seqs:
     input: 
         fish_tbl=outdir + "/lacI_fish_{split}.tsv",
-        fq=outdir + input_prefix + ".part_{split}.fastq.gz"
+        fq=outdir + split_file_prefix + ".part_{split}.fastq.gz"
     output: temp(outdir + "/forward_seqs_{split}.fastq")
     shell: """
         awk '{{ if ($7== "+") {{print $1}}}}' {input.fish_tbl} \
@@ -73,7 +73,7 @@ rule forward_seqs:
 rule reverse_seqs:
     input: 
         fish_tbl=outdir + "/lacI_fish_{split}.tsv",
-        fq=outdir + input_prefix + ".part_{split}.fastq.gz"
+        fq=outdir + split_file_prefix + ".part_{split}.fastq.gz"
     output: temp(outdir + "/reverse_seqs_{split}.fastq")
     shell: """
         awk '{{ if ($7== "-") {{print $1}}}}' {input.fish_tbl} \
