@@ -6,6 +6,7 @@ results
 ref
 docs
 raw
-data
+data*
+ref_data
 .snakemake
 .DS_Store

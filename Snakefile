@@ -25,7 +25,7 @@ outdir=config["outdir"]
 
 ## Input fastq 
 infq = config["infq"]
-split_file_prefix = "/split_fq/" + infq[9:-9]
+split_file_prefix = "/split_fq/" + infq[infq.find("raw")+4:-9]
 
 ## All
 rule all:
@@ -53,7 +53,7 @@ rule split_fq:
 
 rule find_rev:
     input:
-        ref="data/ref/lacI.fa",
+        ref="ref_data/lacI.fa",
         fq=outdir + split_file_prefix + ".part_{split}.fastq.gz"
     output: outdir + "/lacI_fish_{split}.tsv"
     shell: "seqkit fish -j 2 -f {input.ref} {input.fq} 2> {output}"
