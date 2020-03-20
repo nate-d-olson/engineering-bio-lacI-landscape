@@ -30,7 +30,7 @@ input_prefix = "/split_fq/" + infq[9:-9]
 ## All
 rule all:
     input:
-        outdir + "/XTACK_20200108.tsv" , 
+        outdir + "/summary_qc_stats.tsv" , 
         # expand(outdir + "/{seq_group}_stats.tsv", 
         #     seq_group = SEQGROUP),
         expand(outdir + "/targets/{target}_stats.tsv",
@@ -41,7 +41,7 @@ rule all:
 ## Initial QC
 rule ccs_qa:
     input: infq
-    output: outdir + "/XTACK_20200108.tsv" 
+    output: outdir + "/summary_qc_stats.tsv" 
     shell: "seqkit fx2tab -nlgiH {input} > {output}"
 
 ## Identify forward and reverse seqs
