@@ -10,3 +10,4 @@ data*
 ref_data
 .snakemake
 .DS_Store
+*.svg
