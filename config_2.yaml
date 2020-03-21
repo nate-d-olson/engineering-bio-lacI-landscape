@@ -1,0 +1,7 @@
+
+
+outdir:
+    data_2/processed
+    
+infq:
+    data_2/raw/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.fastq.gz

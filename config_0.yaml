@@ -1,0 +1,7 @@
+
+
+outdir:
+    data_0/processed
+    
+infq:
+    data_0/raw/test.fastq.gz
