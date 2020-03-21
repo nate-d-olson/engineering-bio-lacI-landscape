@@ -1,7 +1,7 @@
 
 
 outdir:
-    data_1/processed
+    data_2/processed
     
 infq:
-    data_1/raw/XTACK.ccs.fastq.gz
+    data_2/raw/XTACK_20200108_S64049_PL100138141A-1_A01.ccs.fastq.gz

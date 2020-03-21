@@ -11,3 +11,5 @@ ref_data
 .snakemake
 .DS_Store
 *.svg
+.ipynb_checkpoints
+~*
