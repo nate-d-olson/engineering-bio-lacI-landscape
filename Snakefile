@@ -35,7 +35,7 @@ rule all:
         #     seq_group = SEQGROUP),
         expand(outdir + "/targets/{target}_stats.tsv",
             target = list(set(targets["target"]))),
-        expand(outdir + "/targets/XTACK_2020010_{target}.tsv.gz",
+        expand(outdir + "/targets/{target}.tsv.gz",
             target = list(set(targets["target"])))
 
 ## Initial QC
@@ -135,5 +135,5 @@ rule qa_targets:
 ### Make table
 rule make_seq_tbls:
     input: outdir + "/targets/{target}.fastq.gz"
-    output: outdir + "/targets/XTACK_2020010_{target}.tsv.gz"
+    output: outdir + "/targets/{target}.tsv.gz"
     shell: "seqkit fx2tab -H {input} | cut -f 1,2 | gzip -c > {output}" 
