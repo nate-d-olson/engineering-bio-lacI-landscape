@@ -102,12 +102,13 @@ rule combine_seqs:
 ### extract target sequences
 def get_adp_param(wildcards):
     adp_flag=targets.loc[wildcards.target, "adp_flag"]
+    adp_act=targets.loc[wildcards.target, "adp_act"]
     adapter_seq=targets.loc[wildcards.target, "adapter"]
     
     min_len=targets.loc[wildcards.target, "min_len"]
     max_len=targets.loc[wildcards.target, "max_len"]
 
-    return(f"{adp_flag} {adapter_seq} -m {min_len} -M {max_len}")
+    return(f"{adp_act} {adp_flag} {adapter_seq} -m {min_len} -M {max_len}")
 
 rule extract_target:
     input: outdir + "/combined_seqs.fastq"
