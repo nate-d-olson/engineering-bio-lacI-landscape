@@ -5,8 +5,10 @@
 results
 ref
 docs
-raw
+#raw
 data*
+!data_0/
+data_0/processed/
 ref_data
 .snakemake
 .DS_Store
