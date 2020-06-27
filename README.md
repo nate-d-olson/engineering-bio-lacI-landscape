@@ -3,6 +3,7 @@
 ## Pipeline Overview
 
 - This pipeline performs initial QC of the input PacBio sequencing data.
+- The required input is a g-zipped fastq file contining PacBio CCS reads.
 - Uses the lacI sequence to determine read direction and reverse complements reverse reads.
 - Extracts target sequences, e.g. lacI and barcodes from reads.
 - Generates QC stats for extracted reads.
@@ -22,9 +23,9 @@
 - Run pipeline using `snakemake -j [#]`. The `-j` parameter takes the number of threads or parallel jobs snakemake executes simultaneously. (I like to also include `-p`, which prints the command snakemake executes at each step.) The dry run snakemake argument, `-n`, can be used to see which pipeline steps will be run.
 
 ## Modifying pipeline
-- Pipeline input files are defined in the `Snakefile`, this is not best practice but the pipeline was developed without intending to process multiple datasets. The pipeline can be easily modified to take a config file as input so that dataset specific parameters can be updated without modifying the pipeline code, i.e. `Snakefile`. 
+- Pipeline input files and output directory are defined in the config file, 'config.yaml'. 
 - The adapter sequences are defined and can be updated in the `targets.csv` file. 
 - Snakemake works similar to make in that it only reruns parts of the analysis pipeline when an input file is changed or the output file is missing. After updating the `targets.csv` file you will want to remove any pipeline output files you want to replace.  
 
-## Pipeline output QC
-- The `target_extraction_qc_XTACK_20200108.Rmd` file include some initial QC on the input dataset and extracted target seqeunces(specifically read length distributions). 
+## Test data
+- The file, '/data_0/raw/test.fastq.gz', contains a suitable test dataset. To run the pipeline with another dataset, change the output directory (outdir) and input file (infq) in the config.yaml file.
